@@ -1,14 +1,46 @@
-from typing import Optional
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import cohere
 
-from fastapi import FastAPI
+# Initialize Cohere client
+co = cohere.Client('TcZjPcNuntkBpDbSsH5M5X8N9vlSs6Mq11KoL3rd')
 
+# Initialize FastAPI app
 app = FastAPI()
 
+# In-memory chat history
+chat_history = []
 
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
+# Request and Response Models
+class Message(BaseModel):
+    text: str
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: Optional[str] = None):
-    return {"item_id": item_id, "q": q}
+class Response(BaseModel):
+    reply: str
+
+@app.post("/chat", response_model=Response)
+def chat(message: Message):
+    try:
+        # Generate a response with the current chat history
+        response = co.chat(
+            model='command-r-plus',
+            prompt_truncation='AUTO',
+            connectors=[],
+            message=message.text,
+            temperature=0.8,
+            chat_history=chat_history,
+            preamble='Humorous, witty, and playful. Think comedy writer.'
+        )
+        answer = response.text
+
+        # Add message and answer to the chat history
+        user_message = {"role": "USER", "text": message.text}
+        bot_message = {"role": "CHATBOT", "text": answer}
+
+        chat_history.append(user_message)
+        chat_history.append(bot_message)
+
+        return Response(reply=answer)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
